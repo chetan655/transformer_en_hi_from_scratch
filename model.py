@@ -11,6 +11,8 @@ class InputEmbedding(nn.Module):
 
     def forward(self, x):
         return self.embedding(x) * math.sqrt(self.d_model)
+
+    # output from this class will be -> (batch_size, seq_len, d_model)
     
 
 class PositionalEncoding(nn.Module):
@@ -35,7 +37,15 @@ class PositionalEncoding(nn.Module):
 
         self.register_buffer('pe', pe)  # it saves (pe) inside the module(self) as 'pe' we need positional encoding to be saved. but it is not learnable parameter so we save it like this. it will be saved in state_dict
 
+        # so here pe is of shape -> (1, seq_len, d_model)
+
     def forward(self, x):
+        # adding word embedding and positional embedding
+        '''
+            x -> (batch_size, seq_len, d_model)
+            x.shape[1] -> seq_len
+            [:, :x.shape[1], :] -> [all the batches, dimension from pe upto seq_len, all the d_model]
+        '''
         x = x + (self.pe[:, :x.shape[1], :]).requires_grad(False)  # taking all the rows
         return self.dropout(x)
     
@@ -50,3 +60,102 @@ class LayerNormalization(nn.Module):
         mean = x.mean(dim = -1, keepdim = True)   # -1 means it will calculate mean across 512 features (batch_size, seq_len, embedding(512))
         std = x.std(dim = -1, keepdim = True)
         return self.alpha * (x - mean) / (std + self.eps) + self.bias
+    
+
+class FeedForwardBlock(nn.Module):
+    def __init__(self, d_model: int, d_ff: int, dropout: float) -> None:
+        super().__init__()
+        self.linear_1 = nn.Linear(d_model, d_ff)
+        self.dropout = nn.Dropout(dropout)
+        self.linear_2 = nn.Linear(d_ff, d_model)
+
+    def forward(self, x):
+        # x = self.linear_1(x)
+        # x = torch.relu(x)
+        # x = self.dropout(x)
+        # x = self.linear_2(x)
+        # return x
+
+        return self.linear_2(self.dropout(torch.relu(self.linear_1(x))))
+    
+
+class MultiHeadAttention(nn.Module):
+    def __init__(self, d_model: int, h: int, dropout: float) -> None:
+        super().__init__()
+        self.d_model = d_model
+        self.h = h
+        assert d_model % h == 0, "d_model is not divisible by h"   # assert condition, statement ( condition fails)  -> if condition fails it raise assertionError
+        self.d_k = d_model // h
+        self.w_q = nn.Linear(d_model, d_model)   # query weight matrix
+        self.w_k = nn.Linear(d_model, d_model)   # key weight matrix
+        self.w_v = nn.Linear(d_model, d_model)   # value weight matrix
+        self.w_o = nn.Linear(d_model, d_model)   # matrix at the end used for linear transformation
+        self.dropout = nn.Dropout(dropout)
+
+    @staticmethod
+    def attention(query, key, value, mask, dropout: nn.Dropout):
+        d_k = query.shape[-1]
+
+        # [batch, h, seq_len, d_k] -> [batch, h, seq_len, seq_len]    # every attention head gets some part of the sentence
+        attention_score = (query @ key.transpose(-2, -1)) / math.sqrt(d_k)   
+        if mask is not None:
+            attention_score.masked_fill_(mask == 0, -1e9)            # it will replace values that are 0 to -1e9
+        attention_score = attention_score.softmax(dim = -1)  # [batch, h, seq_len, seq_len]
+        
+        if dropout is not None:
+            attention_score = dropout(attention_score)
+
+        return (attention_score @ value), attention_score
+ 
+    def forward(self, q, k, v, mask):           # if we do not want some words to interect with some other then we mask them
+        query = self.w_q(q)   # (batch, seq_len, d_model) -> (batch, seq_len, d_model) and same for below three also
+        key = self.w_k(k)
+        value = self.w_v(v)
+
+        query = query.view(query.shape[0], query.shape[1], self.h, self.d_k).transpose(1, 2)    # [batch, seq_len, d_model] -> [batch, seq_len, num_head, d_k] -> [batch, num_head, seq_len, d_k]
+        key = key.view(key.shape[0], key.shape[1], self.h, self.h, self.d_k).transpose(1,2)
+        key = value.view(value.shape[0], value.shape[1], self.h, self.h, self.d_k).transpose(1,2)
+        
+        x, self.attention_scores = MultiHeadAttention.attention(query, key, value, mask, self.dropout)
+
+        # [batch, h, seq_len, d_k] -> [batch, seq_len, h, d_k] -> [batch, seq_len, d_model]
+        x = x.transpose(1,2).contigious().view(x.shape[0], -1, self.h * self.d_k)
+
+        # [batch, seq_len, d_model] -> [batch, seq_len, d_model]
+        return self.w_o(x)
+        
+
+class ResidualConnection(nn.Module):
+    def __init__(self, dropout: float) -> None:
+        super().__init__()
+        self.dropout = nn.Dropout(dropout)
+        self.norm = LayerNormalization()
+
+    def forward(self, x, sublayer):
+        return x + self.dropout(sublayer(self.norm(x)))    # sublayer can be ffnn or multi-head attention and x is the raw input
+        # self.norm(x + self.dropout(sublayer(x)))  # use in gpt/ bert
+
+
+class EncoderBlock(nn.Module):
+    def __init__(self, self_attention_block: MultiHeadAttention, feed_forward_block: FeedForwardBlock, dropout: float) -> None:
+        super().__init__()
+        self.self_attention_block = self_attention_block
+        self.feed_forward_block = feed_forward_block
+        self.residual_connections = nn.ModuleList([ResidualConnection(dropout) for _ in range(2)])
+
+    def forward(self, x, src_mask):
+        x = self.residual_connections[0](x, lambda x: self.self_attention_block(x, x, x, src_mask))   # we have multiple arguments in forward method of multi-head attention so we use anonymous function lambda
+        x = self.residual_connections[1](x, self.feed_forward_block)
+        return x
+    
+
+class Encoder(nn.Module):
+    def __init__(self, layers: nn.ModuleList) -> None:
+        super().__init__()
+        self.layers = layers
+        self.norm = LayerNormalization()
+
+    def forward(self, x, mask):
+        for layer in self.layers:
+            x = layer(x, mask)
+        return self.norm(x)
