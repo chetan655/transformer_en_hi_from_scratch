@@ -114,7 +114,7 @@ class MultiHeadAttention(nn.Module):
 
         query = query.view(query.shape[0], query.shape[1], self.h, self.d_k).transpose(1, 2)    # [batch, seq_len, d_model] -> [batch, seq_len, num_head, d_k] -> [batch, num_head, seq_len, d_k]
         key = key.view(key.shape[0], key.shape[1], self.h, self.h, self.d_k).transpose(1,2)
-        key = value.view(value.shape[0], value.shape[1], self.h, self.h, self.d_k).transpose(1,2)
+        value = value.view(value.shape[0], value.shape[1], self.h, self.h, self.d_k).transpose(1,2)
         
         x, self.attention_scores = MultiHeadAttention.attention(query, key, value, mask, self.dropout)
 
@@ -123,6 +123,30 @@ class MultiHeadAttention(nn.Module):
 
         # [batch, seq_len, d_model] -> [batch, seq_len, d_model]
         return self.w_o(x)
+    
+
+    '''
+        MultiHeadAttention:-
+        - suppose we have 2 tokens and their embedding is of 512 dim. so we stack them to send in. Now their shape is (2x512)
+        - these embedding will make 3 matrix named (query, key, value)
+        - input (2x512) will be multiplied with 8 * (query_weight_matrix, key_weight_matrix, value_weight_matrix), each of shape (512x512)
+        - output from above calculation is 8 * (query_matrix, key_matrix, value_matrix), each of shape (2x512)
+        - we reshape it from (2x512), assume batch_size = 1, so we reshape it from (1x2x512) -> (1x2x8x64) or we can say [(batch_size, seq_len, d_model) -> (batch_size, seq_len, heads(h), each_head_dim(d_model//h))]
+        - (batch_size, seq_len, h, d_k) this line means for each token we have 8 heads of dim 64
+        - we transpose it to (batch_size, h, seq_len, d_k), now this line means (for each head we have all tokens of dim 64)
+        - before transposing each token is getting all heads, after transposing each head getting all tokens some part.
+        - now all query, key, value matrix have shape (batch_size, h, seq_len, d_k)
+        - they will be sent to attention function
+        - to calculate attention score we multiple (query * key.T) means, [(batch_size, h, seq_len, d_k)*(batch_size, h, seq_len, d_k).transpose(-2, -1)] -> [(batch_size, h, seq_len, d_k) * (batch_size, h, d_k, seq_len)] * sqrt(d_k)
+        - now we have attention score shape as -> [batch_size, h, seq_len, seq_len] 
+        - x = attention_score * value
+        - [(batch_size, h, seq_len, seq_len) * (batch_size, h, seq_len, d_k) -> (batch_size, h, seq_len, d_k)]
+        - now transpose x as x.transpose(1,2) -> (batch_size, seq_len, h, d_k)
+        - x.transpose changes shape, but memory is not contiguous
+        - .contigious makes a new, properly ordered block of memory
+        - .view now safely reshapes it
+        - after applying .view we get original matrix [batch_size, seq_len, d_model]
+    '''
         
 
 class ResidualConnection(nn.Module):
