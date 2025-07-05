@@ -26,6 +26,14 @@ def get_or_build_tokenizer(config, ds, lang):
     else:
         tokenizer = Tokenizer.from_file(str(tokenizer_path))
     return tokenizer
+
+'''
+    working of get_ds function :-
+        - load dataset and assign it to a variable  (data is in json format)
+        - create src and tgt tokenizer
+        - train test split
+        - 
+'''
     
 def get_ds(config):
     ds_raw = load_dataset("json", data_files="merged_iitb_en_hi.jsonl")
