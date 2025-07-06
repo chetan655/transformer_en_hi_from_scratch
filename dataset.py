@@ -18,9 +18,9 @@ class BiligualDataset(Dataset):
         self.tgt_lang = tgt_lang
         self.seq_len = seq_len
 
-        self.sos_token = torch.Tensor([tokenizer_src.token_to_id(['[SOS]'])], dtype=torch.int64)   # it returns its token id
-        self.eos_token = torch.Tensor([tokenizer_src.token_to_id(['[EOS]'])], dtype=torch.int64)
-        self.pad_token = torch.Tensor([tokenizer_src.token_to_id(['[PAD]'])], dtype=torch.int64)
+        self.sos_token = torch.tensor([tokenizer_tgt.token_to_id("[SOS]")], dtype=torch.int64)  # it returns its toke
+        self.eos_token = torch.tensor([tokenizer_tgt.token_to_id("[EOS]")], dtype=torch.int64)
+        self.pad_token = torch.tensor([tokenizer_tgt.token_to_id("[PAD]")], dtype=torch.int64)
 
     def __len__(self):
         return len(self.ds)   # returns length by counting all the items in ds
@@ -31,7 +31,9 @@ class BiligualDataset(Dataset):
         tgt_text = src_target_pair['translation'][self.tgt_lang]
 
         enc_input_tokens = self.tokenizer_src.encode(src_text).ids    # ecoder(src_text) -> this method takes a str and converts it into a Encoding object. this object things like ids, tokens
-        dec_input_tokens = self.tokenizer_tgt(tgt_text).ids
+        # dec_input_tokens = self.tokenizer_tgt(tgt_text).ids
+        dec_input_tokens = self.tokenizer_tgt.encode(tgt_text).ids
+
 
         enc_num_padding_tokens = self.seq_len - len(enc_input_tokens) - 2  # (2? -> one for SOS, one for EOS)
         dec_num_padding_tokens = self.seq_len - len(dec_input_tokens) - 1  # (1? -> for SOS, decoder have to predict EOS)

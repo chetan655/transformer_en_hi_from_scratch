@@ -47,7 +47,8 @@ class PositionalEncoding(nn.Module):
             x.shape[1] -> seq_len
             [:, :x.shape[1], :] -> [all the batches, dimension from pe upto seq_len, all the d_model]
         '''
-        x = x + (self.pe[:, :x.shape[1], :]).requires_grad(False)  # taking all the rows
+        # x = x + (self.pe[:, :x.shape[1], :]).requires_grad(False)  # taking all the rows
+        x = x + (self.pe[:, :x.shape[1], :])  # taking all the rows
         return self.dropout(x)
     
 class LayerNormalization(nn.Module):
@@ -114,13 +115,13 @@ class MultiHeadAttention(nn.Module):
         value = self.w_v(v)
 
         query = query.view(query.shape[0], query.shape[1], self.h, self.d_k).transpose(1, 2)    # [batch, seq_len, d_model] -> [batch, seq_len, num_head, d_k] -> [batch, num_head, seq_len, d_k]
-        key = key.view(key.shape[0], key.shape[1], self.h, self.h, self.d_k).transpose(1,2)
-        value = value.view(value.shape[0], value.shape[1], self.h, self.h, self.d_k).transpose(1,2)
+        key = key.view(key.shape[0], key.shape[1], self.h, self.d_k).transpose(1,2)
+        value = value.view(value.shape[0], value.shape[1], self.h, self.d_k).transpose(1,2)
         
         x, self.attention_scores = MultiHeadAttention.attention(query, key, value, mask, self.dropout)
 
         # [batch, h, seq_len, d_k] -> [batch, seq_len, h, d_k] -> [batch, seq_len, d_model]
-        x = x.transpose(1,2).contigious().view(x.shape[0], -1, self.h * self.d_k)
+        x = x.transpose(1,2).contiguous().view(x.shape[0], -1, self.h * self.d_k)
 
         # [batch, seq_len, d_model] -> [batch, seq_len, d_model]
         return self.w_o(x)
@@ -229,11 +230,11 @@ class Transformer(nn.Module):
         self.decoder = decoder
         self.src_embedding = src_embedding
         self.tgt_embedding = tgt_embedding
-        self.src_position = src_embedding
-        self.tgt_position = tgt_embedding
+        self.src_position = src_position
+        self.tgt_position = tgt_position
         self.projection_layer = projection_layer
 
-    def encoder(self, src, src_mask):
+    def encode(self, src, src_mask):
         src = self.src_embedding(src)
         src = self.src_position(src)
         return self.encoder(src, src_mask)
