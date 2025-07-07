@@ -84,7 +84,7 @@ class BiligualDataset(Dataset):
         }
     
 def causal_mask(size):
-    mask = torch.triu(torch.ones(1, size, size), diagonal=1).type(torch.int)       # this is built-in method in pytorch to make a matrix that is diagonally half 0 and other half 1
+    mask = torch.triu(torch.ones(1, size, size), diagonal=1).type(torch.int64)       # this is built-in method in pytorch to make a matrix that is diagonally half 0 and other half 1
     return mask == 0                                                               # it will convert 1 to True and 0 to False
 
 

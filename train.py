@@ -121,7 +121,7 @@ def get_or_build_tokenizer(config, ds, lang):
         tokenizer = Tokenizer(WordLevel(unk_token='[UNK]'))
         tokenizer.pre_tokenizer = Whitespace()
         trainer = WordLevelTrainer(special_tokens=["[UNK]", "[PAD]", "[SOS]","[EOS]"], min_frequency=2)
-        tokenizer.train_from_iterator(get_all_sentences(ds["train"], lang), trainer=trainer)
+        tokenizer.train_from_iterator(get_all_sentences(ds, lang), trainer=trainer)
         tokenizer.save(str(tokenizer_path))
     else:
         tokenizer = Tokenizer.from_file(str(tokenizer_path))
@@ -136,7 +136,10 @@ def get_or_build_tokenizer(config, ds, lang):
 '''
     
 def get_ds(config):
-    ds_raw = load_dataset("json", data_files="merged_iitb_en_hi.jsonl")["train"]
+    # ds_raw = load_dataset("json", data_files="merged_iitb_en_hi.jsonl")["train"]
+    ds_raw = load_dataset("json", data_files="filtered5_iitb_en_hi.jsonl")["train"]
+
+
 
     tokenizer_src = get_or_build_tokenizer(config, ds_raw, config['lang_src'])
     tokenizer_tgt = get_or_build_tokenizer(config, ds_raw, config['lang_tgt'])
